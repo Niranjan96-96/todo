@@ -1,137 +1,209 @@
-// select everything
-// select the todo-form
-const todoForm = document.querySelector('.todo-form');
-// select the input box
-const todoInput = document.querySelector('.todo-input');
-// select the <ul> with class="todo-items"
-const todoItemsList = document.querySelector('.todo-items');
+let allTodos, allChecked, allActive, numberOfUnchecked, allHidden, listArray, theme;
+const list = document.querySelector("ul");
+//handle local Storage
 
-// array which stores every todos
-let todos = [];
+listArray = JSON.parse(localStorage.getItem("todoList"));
+theme = JSON.parse(localStorage.getItem("light-theme"));
 
-// add an eventListener on form, and listen for submit event
-todoForm.addEventListener('submit', function(event) {
-  // prevent the page from reloading when submitting the form
-  event.preventDefault();
-  addTodo(todoInput.value); // call addTodo function with input box current value
-});
-
-// function to add todo
-function addTodo(item) {
-  // if item is not empty
-  if (item !== '') {
-    // make a todo object, which has id, name, and completed properties
-    const todo = {
-      id: Date.now(),
-      name: item,
-      completed: false
-    };
-
-    // then add it to todos array
-    todos.push(todo);
-    addToLocalStorage(todos); // then store it in localStorage
-
-    // finally clear the input box value
-    todoInput.value = '';
-  }
+if (!listArray) {
+  listArray = [];
+  localStorage.setItem("todoList", JSON.stringify(listArray));
 }
 
-// function to render given todos to screen
-function renderTodos(todos) {
-  // clear everything inside <ul> with class=todo-items
-  todoItemsList.innerHTML = '';
+if (!theme) {
+  localStorage.setItem("light-theme", false);
+} else {
+  document.querySelector("html").classList.toggle("light-theme");
+}
 
-  // run through each item inside todos
-  todos.forEach(function(item) {
-    // check if the item is completed
-    const checked = item.completed ? 'checked': null;
+//change theme
+const changeTheme = () => {
+  const lightTheme = JSON.parse(localStorage.getItem("light-theme"));
+  localStorage.setItem("light-theme", JSON.stringify(!lightTheme));
+  document.querySelector("html").classList.toggle("light-theme");
+  document.querySelector(".theme-icon").src = document.querySelector("html").classList.contains("light-theme")? "./images/icon-moon.svg" : "./images/icon-sun.svg";
+};
 
-    // make a <li> element and fill it
-    // <li> </li>
-    const li = document.createElement('li');
-    // <li class="item"> </li>
-    li.setAttribute('class', 'item');
-    // <li class="item" data-key="20200708"> </li>
-    li.setAttribute('data-key', item.id);
-    /* <li class="item" data-key="20200708"> 
-          <input type="checkbox" class="checkbox">
-          Go to Gym
-          <button class="delete-button">X</button>
-        </li> */
-    // if item is completed, then add a class to <li> called 'checked', which will add line-through style
-    if (item.completed === true) {
-      li.classList.add('checked');
-    }
+document.querySelector(".theme-button").addEventListener("click", changeTheme);
 
-    li.innerHTML = `
-      <input type="checkbox" class="checkbox" ${checked}>
-      ${item.name}
-      <button class="delete-button">X</button>
+// update counter function
+const updateNumberOfUnchecked = () => {
+  numberOfUnchecked = listArray.filter((el) => !el.checked).length;
+  document.querySelector("#numberOfUnchecked").innerHTML = `${numberOfUnchecked}`;
+};
+
+// add new todo list item
+const handleSubmitForm = (e) => {
+//   e.preventDefault();
+  let listItemId = Date.now();
+  let input = document.querySelector("input");
+
+  if (input.value) {
+    addToStorage(listItemId, input.value, false);
+    addToDOM(listItemId, input.value);
+  }
+  input.value = "";
+  listItemId = "";
+};
+
+//adding items
+const addToStorage = (id, value, checked) => {
+  listArray.push({ id, value, checked });
+  localStorage.setItem("todoList", JSON.stringify(listArray));
+};
+
+const addToDOM = (id, value, checked) => {
+  const li = document.createElement("li");
+  li.innerHTML = `
+    <label class="list-item">
+        <input aria-label="tick item" class="checkbox ${
+          checked ? "checkbox-tick" : ""
+        }" type="checkbox"/>
+	    <span class="todo-text">${value}</span>
+      <img class="cross" src="./images/icon-cross.svg" alt="cross"/>
+    </label>
     `;
-    // finally add the <li> to the <ul>
-    todoItemsList.append(li);
-  });
 
-}
-
-// function to add todos to local storage
-function addToLocalStorage(todos) {
-  // conver the array to string then store it.
-  localStorage.setItem('todos', JSON.stringify(todos));
-  // render them to screen
-  renderTodos(todos);
-}
-
-// function helps to get everything from local storage
-function getFromLocalStorage() {
-  const reference = localStorage.getItem('todos');
-  // if reference exists
-  if (reference) {
-    // converts back to array and store it in todos array
-    todos = JSON.parse(reference);
-    renderTodos(todos);
+  li.setAttribute("draggable", true);
+  li.setAttribute("id", id);
+  li.classList.add("todo-list-item");
+  if (checked) {
+    li.classList.add("checkedItem");
   }
-}
+  //item Click event lister
+  li.querySelector("input").addEventListener("change", handleItemClick);
 
-// toggle the value to completed and not completed
-function toggle(id) {
-  todos.forEach(function(item) {
-    // use == not ===, because here types are different. One is number and other is string
-    if (item.id == id) {
-      // toggle the value
-      item.completed = !item.completed;
+  li.querySelector("span").addEventListener("click", handleItemClick);
+
+  //cross click event listener
+  li.querySelector("img").addEventListener("click", handleCrossClick);
+
+  //event listener for drag and drop
+  li.addEventListener("dragstart", dragStart);
+  li.addEventListener("dragend", dragEnd);
+  list.appendChild(li);
+  updateNumberOfUnchecked();
+};
+
+//removing items
+const removeFromStorage = (id) => {
+  const newListArray = listArray.filter((el) => el.id != id);
+  listArray = newListArray;
+  localStorage.setItem("todoList", JSON.stringify(listArray));
+};
+
+const removeFromDOM = (node) => {
+  list.removeChild(node);
+};
+
+//changing checked status
+const changeInStorage = (nodeId) => {
+  const newListArray = listArray.map((el) =>
+    el.id == nodeId ? { ...el, checked: !el.checked } : el );
+  listArray = newListArray;
+  localStorage.setItem("todoList", JSON.stringify(listArray));
+};
+
+const changeInDOM = (node) => {
+  node.querySelector("input").classList.toggle("checkbox-tick");
+  node.classList.toggle("checkedItem");
+};
+
+// toggles list items checked status
+const handleItemClick = (e) => {
+//   e.preventDefault();
+  const container = e.target.parentNode.parentNode;
+  const liNodeId = container.id;
+  changeInDOM(container);
+  changeInStorage(liNodeId);
+  updateNumberOfUnchecked();
+};
+
+// removes list items
+const handleCrossClick = (e) => {
+//   e.preventDefault();
+  const liNode = e.target.parentNode.parentNode;
+  const liNodeId = liNode.id;
+  removeFromDOM(liNode);
+  removeFromStorage(liNodeId);
+  updateNumberOfUnchecked();
+};
+
+const handleModalSelection = (e) => {
+  const allSelectors = e.target.parentNode.querySelectorAll("a");
+  const selector = e.target;
+  allSelectors.forEach((el) => el.classList.remove("active-selection"));
+  if (selector.parentNode.classList.contains("filter-group")) {
+    selector.classList.add("active-selection");
+  }
+};
+
+//reset
+const reset = () => {
+  allHidden = document.querySelectorAll(".element-hidden");
+  allHidden.forEach((el) => el.classList.remove("element-hidden"));
+};
+
+// hide all checked items
+const hideChecked = (e) => {
+  reset();
+  allChecked = document.querySelectorAll(".checkedItem");
+  allChecked.forEach((el) => el.classList.add("element-hidden"));
+  handleModalSelection(e);
+};
+
+// hide all unchecked items
+const hideActive = (e) => {
+  reset();
+  allElements = document.querySelectorAll("li");
+  allElements.forEach((el) => {
+    if (!el.classList.contains("checkedItem")) {
+      el.classList.add("element-hidden");
     }
   });
+  handleModalSelection(e);
+};
 
-  addToLocalStorage(todos);
-}
+// show all items
+const showAll = (e) => {
+  reset();
+  handleModalSelection(e);
+};
 
-// deletes a todo from todos array, then updates localstorage and renders updated list to screen
-function deleteTodo(id) {
-  // filters out the <li> with the id and updates the todos array
-  todos = todos.filter(function(item) {
-    // use != not !==, because here types are different. One is number and other is string
-    return item.id != id;
-  });
+const removeChecked = (e) => {
+  let allCompleted = document.querySelectorAll(".checkedItem");
+  let list = document.querySelector("ul");
+  allCompleted.forEach((el) => list.removeChild(el));
+  showAll(e);
+};
+//drag and drop
+const container = document.querySelector("ul");
+const dragStart = (e) => {
+  const item = e.target;
+  item.classList.add("dragging");
+};
 
-  // update the localStorage
-  addToLocalStorage(todos);
-}
+const dragEnd = (e) => {
+  e.target.classList.remove("dragging");
+};
 
-// initially get everything from localStorage
-getFromLocalStorage();
-
-// after that addEventListener <ul> with class=todoItems. Because we need to listen for click event in all delete-button and checkbox
-todoItemsList.addEventListener('click', function(event) {
-  // check if the event is on checkbox
-  if (event.target.type === 'checkbox') {
-    // toggle the state
-    toggle(event.target.parentElement.getAttribute('data-key'));
+const dragOver = (e) => {
+//   e.preventDefault();
+  const afterElement = getDragAfterElement(container, e.clientY);
+  const draggable = document.querySelector(".dragging");
+  if (afterElement == null) {
+    container.appendChild(draggable);
+  } else {
+    container.insertBefore(draggable, afterElement);
   }
+};
+//handle local Storage
+listArray.map((el) => addToDOM(el.id, el.value, el.checked));
 
-  // check if that is a delete-button
-  if (event.target.classList.contains('delete-button')) {
-    // get id from data-key attribute's value of parent <li> where the delete-button is present
-    deleteTodo(event.target.parentElement.getAttribute('data-key'));
-  }
-});
+//add event listeners
+document.querySelector("form").addEventListener("submit", handleSubmitForm);
+document.querySelector(".show-all").addEventListener("click", showAll);
+document.querySelector(".hide-checked").addEventListener("click", hideChecked);
+document.querySelector(".hide-active").addEventListener("click", hideActive);
+document.querySelector(".clear-completed").addEventListener("click", removeChecked);
+container.addEventListener("dragover", dragOver);
